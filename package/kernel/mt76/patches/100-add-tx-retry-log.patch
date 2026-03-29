@@ -1,0 +1,48 @@
+--- a/mt7915/mac.c
++++ b/mt7915/mac.c
+@@ -994,6 +994,8 @@
+ 	wcidx = le32_get_bits(txs_data[2], MT_TXS2_WCID);
+ 	pid = le32_get_bits(txs_data[3], MT_TXS3_PID);
+ 
++	dev_info(dev->mt76.dev, "[txs_probe] wcidx=%u pid=%u\n", wcidx, pid);
++
+ 	if (pid < MT_PACKET_ID_WED)
+ 		return;
+ 
+@@ -1010,6 +1012,36 @@
+ 	else
+ 		mt76_connac2_mac_add_txs_skb(&dev->mt76, wcid, pid, txs_data);
+ 
++	if (wcid->sta) {
++		static const u8 target_addr[ETH_ALEN] = {
++			0x5A, 0x8F, 0x8D, 0x98, 0x4F, 0x83
++		};
++		struct ieee80211_sta *sta = wcid_to_sta(wcid);
++		u32 txs = le32_to_cpu(txs_data[0]);
++		u32 format = FIELD_GET(MT_TXS0_TXS_FORMAT, txs);
++		u32 tx_retries = 0;
++
++		if (format == 0) {
++			u32 tx_count = le32_get_bits(txs_data[5],
++						     MT_TXS5_F0_TX_COUNT);
++			tx_retries = tx_count > 0 ? tx_count - 1 : 0;
++		} else {
++			tx_retries = le32_get_bits(txs_data[7],
++						   MT_TXS7_F1_MPDU_RETRY_COUNT);
++		}
++
++		if (tx_retries > 0 && sta &&
++		    ether_addr_equal(sta->addr, target_addr)) {
++			struct timespec64 ts;
++
++			ktime_get_real_ts64(&ts);
++			dev_info(dev->mt76.dev,
++				 "[tx_retry] ts=%lld.%06ld wcid=%u addr=%pM fmt=%u retries=%u\n",
++				 (long long)ts.tv_sec, ts.tv_nsec / 1000,
++				 wcid->idx, sta->addr, format, tx_retries);
++		}
++	}
++
+ 	if (!wcid->sta)
+ 		goto out;
+ 
