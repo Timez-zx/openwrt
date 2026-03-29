@@ -1,18 +1,9 @@
 --- a/mt7915/mac.c
 +++ b/mt7915/mac.c
-@@ -994,6 +994,8 @@
- 	wcidx = le32_get_bits(txs_data[2], MT_TXS2_WCID);
- 	pid = le32_get_bits(txs_data[3], MT_TXS3_PID);
- 
-+	dev_info(dev->mt76.dev, "[txs_probe] wcidx=%u pid=%u\n", wcidx, pid);
-+
- 	if (pid < MT_PACKET_ID_WED)
- 		return;
- 
-@@ -1010,6 +1012,36 @@
+@@ -1010,6 +1010,36 @@
  	else
  		mt76_connac2_mac_add_txs_skb(&dev->mt76, wcid, pid, txs_data);
- 
+
 +	if (wcid->sta) {
 +		static const u8 target_addr[ETH_ALEN] = {
 +			0x5A, 0x8F, 0x8D, 0x98, 0x4F, 0x83
@@ -45,4 +36,3 @@
 +
  	if (!wcid->sta)
  		goto out;
- 
