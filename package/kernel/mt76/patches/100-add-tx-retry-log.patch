@@ -1,38 +1,87 @@
---- a/mt7915/mac.c
-+++ b/mt7915/mac.c
-@@ -1010,6 +1010,36 @@
+--- a/mt7915/mac.c	2026-03-29 18:15:02.348719105 -0500
++++ b/mt7915/mac.c	2026-03-30 12:49:28.846733551 -0500
+@@ -757,6 +757,48 @@
+ 			msta->jiffies = jiffies;
+ 		}
+ 	}
++	if (sta) {
++		static const u8 target_addr[ETH_ALEN] = {
++			0x5A, 0x8F, 0x8D, 0x98, 0x4F, 0x83
++		};
++
++		if (ether_addr_equal(sta->addr, target_addr)) {
++			const u8 *d = tx_info->skb->data;
++			bool is_udp = false;
++
++			if (info->flags & IEEE80211_TX_CTL_HW_80211_ENCAP) {
++				/* Ethernet: dst(6)+src(6)+ethertype(2)+IP */
++				if (tx_info->skb->len >= 14 + 20 &&
++				    d[12] == 0x08 && d[13] == 0x00 &&
++				    d[14 + 9] == IPPROTO_UDP)
++					is_udp = true;
++			} else if (ieee80211_is_data_qos(hdr->frame_control)) {
++				/* 802.11 QoS Data: hdr + LLC/SNAP(8) + IP */
++				int hl = ieee80211_hdrlen(hdr->frame_control);
++
++				if (tx_info->skb->len >= hl + 8 + 20 &&
++				    d[hl + 6] == 0x08 && d[hl + 7] == 0x00 &&
++				    d[hl + 8 + 9] == IPPROTO_UDP)
++					is_udp = true;
++			}
++
++			if (is_udp) {
++				static atomic_t udp_count = ATOMIC_INIT(0);
++				int cnt = atomic_inc_return(&udp_count);
++
++				if (cnt % 10000 == 0) {
++					struct timespec64 ts;
++
++					ktime_get_real_ts64(&ts);
++					dev_info(mdev->dev,
++						 "[udp_count] ts=%lld.%06ld count=%d addr=%pM\n",
++						 (long long)ts.tv_sec, ts.tv_nsec / 1000,
++						 cnt, sta->addr);
++				}
++			}
++		}
++	}
++
+ 
+ 	t = (struct mt76_txwi_cache *)(txwi + mdev->drv->txwi_size);
+ 	t->skb = tx_info->skb;
+@@ -1009,6 +1051,35 @@
+ 		mt76_connac2_mac_fill_txs(&dev->mt76, wcid, txs_data);
  	else
  		mt76_connac2_mac_add_txs_skb(&dev->mt76, wcid, pid, txs_data);
-
 +	if (wcid->sta) {
 +		static const u8 target_addr[ETH_ALEN] = {
 +			0x5A, 0x8F, 0x8D, 0x98, 0x4F, 0x83
 +		};
 +		struct ieee80211_sta *sta = wcid_to_sta(wcid);
-+		u32 txs = le32_to_cpu(txs_data[0]);
-+		u32 format = FIELD_GET(MT_TXS0_TXS_FORMAT, txs);
-+		u32 tx_retries = 0;
 +
-+		if (format == 0) {
-+			u32 tx_count = le32_get_bits(txs_data[5],
-+						     MT_TXS5_F0_TX_COUNT);
-+			tx_retries = tx_count > 0 ? tx_count - 1 : 0;
-+		} else {
-+			tx_retries = le32_get_bits(txs_data[7],
-+						   MT_TXS7_F1_MPDU_RETRY_COUNT);
-+		}
-+
-+		if (tx_retries > 0 && sta &&
-+		    ether_addr_equal(sta->addr, target_addr)) {
++		if (sta && ether_addr_equal(sta->addr, target_addr)) {
++			u32 txs = le32_to_cpu(txs_data[0]);
++			u32 format = FIELD_GET(MT_TXS0_TXS_FORMAT, txs);
++			u32 tx_retries = 0;
 +			struct timespec64 ts;
++
++			if (format == 0) {
++				u32 tx_count = le32_get_bits(txs_data[5],
++							     MT_TXS5_F0_TX_COUNT);
++				tx_retries = tx_count > 0 ? tx_count - 1 : 0;
++			} else {
++				tx_retries = le32_get_bits(txs_data[7],
++							   MT_TXS7_F1_MPDU_RETRY_COUNT);
++			}
 +
 +			ktime_get_real_ts64(&ts);
 +			dev_info(dev->mt76.dev,
-+				 "[tx_retry] ts=%lld.%06ld wcid=%u addr=%pM fmt=%u retries=%u\n",
++				 "[tx_stat] ts=%lld.%06ld wcid=%u addr=%pM fmt=%u retries=%u\n",
 +				 (long long)ts.tv_sec, ts.tv_nsec / 1000,
 +				 wcid->idx, sta->addr, format, tx_retries);
 +		}
 +	}
 +
+ 
  	if (!wcid->sta)
  		goto out;
