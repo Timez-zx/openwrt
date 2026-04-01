@@ -25,7 +25,9 @@ PKG_CONFIG_DEPENDS += \
 	CONFIG_PACKAGE_kmod-mt76x2 \
 	CONFIG_PACKAGE_kmod-mt76x2u \
 	CONFIG_PACKAGE_kmod-mt7603 \
-	CONFIG_PACKAGE_CFG80211_TESTMODE
+	CONFIG_PACKAGE_CFG80211_TESTMODE \
+	CONFIG_MT76_UDP_COUNT_LOG \
+	CONFIG_MT76_TX_RETRY_LOG
 
 STAMP_CONFIGURED_DEPENDS := $(STAGING_DIR)/usr/include/mac80211-backport/backport/autoconf.h
 
@@ -238,6 +240,24 @@ define KernelPackage/mt7915e
   DEPENDS+=@PCI_SUPPORT +kmod-mt76-connac +kmod-hwmon-core +kmod-thermal +@DRIVER_11AX_SUPPORT +@KERNEL_RELAY
   FILES:= $(PKG_BUILD_DIR)/mt7915/mt7915e.ko
   AUTOLOAD:=$(call AutoProbe,mt7915e)
+endef
+
+define KernelPackage/mt7915e/config
+  config MT76_UDP_COUNT_LOG
+    bool "Enable UDP packet count logging for MT7915"
+    depends on PACKAGE_kmod-mt7915e
+    default n
+    help
+      Log UDP packet count every 10000 packets for a specific
+      target MAC address in the MT7915 driver.
+
+  config MT76_TX_RETRY_LOG
+    bool "Enable TX retry statistics logging for MT7915"
+    depends on PACKAGE_kmod-mt7915e
+    default n
+    help
+      Log TX retry count per transmission for a specific
+      target MAC address in the MT7915 driver.
 endef
 
 define KernelPackage/mt7916-firmware
@@ -516,6 +536,13 @@ ifdef CONFIG_PACKAGE_kmod-mt7925u
 endif
 ifdef CONFIG_PACKAGE_kmod-mt7925e
   PKG_MAKE_FLAGS += CONFIG_MT7925E=m
+endif
+
+ifdef CONFIG_MT76_UDP_COUNT_LOG
+  NOSTDINC_FLAGS += -DMT76_UDP_COUNT_LOG
+endif
+ifdef CONFIG_MT76_TX_RETRY_LOG
+  NOSTDINC_FLAGS += -DMT76_TX_RETRY_LOG
 endif
 
 define Build/Compile

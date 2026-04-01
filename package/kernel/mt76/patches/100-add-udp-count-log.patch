@@ -1,9 +1,10 @@
 --- a/mt7915/mac.c	2026-03-29 18:15:02.348719105 -0500
 +++ b/mt7915/mac.c	2026-03-30 12:49:28.846733551 -0500
-@@ -757,6 +757,48 @@
+@@ -757,6 +757,50 @@
  			msta->jiffies = jiffies;
  		}
  	}
++#ifdef MT76_UDP_COUNT_LOG
 +	if (sta) {
 +		static const u8 target_addr[ETH_ALEN] = {
 +			0x5A, 0x8F, 0x8D, 0x98, 0x4F, 0x83
@@ -45,43 +46,8 @@
 +			}
 +		}
 +	}
++#endif
 +
- 
+
  	t = (struct mt76_txwi_cache *)(txwi + mdev->drv->txwi_size);
  	t->skb = tx_info->skb;
-@@ -1009,6 +1051,35 @@
- 		mt76_connac2_mac_fill_txs(&dev->mt76, wcid, txs_data);
- 	else
- 		mt76_connac2_mac_add_txs_skb(&dev->mt76, wcid, pid, txs_data);
-+	if (wcid->sta) {
-+		static const u8 target_addr[ETH_ALEN] = {
-+			0x5A, 0x8F, 0x8D, 0x98, 0x4F, 0x83
-+		};
-+		struct ieee80211_sta *sta = wcid_to_sta(wcid);
-+
-+		if (sta && ether_addr_equal(sta->addr, target_addr)) {
-+			u32 txs = le32_to_cpu(txs_data[0]);
-+			u32 format = FIELD_GET(MT_TXS0_TXS_FORMAT, txs);
-+			u32 tx_retries = 0;
-+			struct timespec64 ts;
-+
-+			if (format == 0) {
-+				u32 tx_count = le32_get_bits(txs_data[5],
-+							     MT_TXS5_F0_TX_COUNT);
-+				tx_retries = tx_count > 0 ? tx_count - 1 : 0;
-+			} else {
-+				tx_retries = le32_get_bits(txs_data[7],
-+							   MT_TXS7_F1_MPDU_RETRY_COUNT);
-+			}
-+
-+			ktime_get_real_ts64(&ts);
-+			dev_info(dev->mt76.dev,
-+				 "[tx_stat] ts=%lld.%06ld wcid=%u addr=%pM fmt=%u retries=%u\n",
-+				 (long long)ts.tv_sec, ts.tv_nsec / 1000,
-+				 wcid->idx, sta->addr, format, tx_retries);
-+		}
-+	}
-+
- 
- 	if (!wcid->sta)
- 		goto out;
